@@ -1,0 +1,17 @@
+function __condev_help
+    echo "condev - VS Code DevContainer discovery and connection"
+    echo ""
+    echo "Usage:"
+    echo "  condev [options] [container-name]"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help    Show this help message"
+    echo "  -l, --list    List all devcontainers"
+    echo "  -a, --all     Include stopped containers"
+    echo ""
+    echo "Examples:"
+    echo "  condev              # Interactive selection"
+    echo "  condev -l           # List running devcontainers"
+    echo "  condev -la          # List all devcontainers"
+    echo "  condev my-container # Connect to specific container"
+end
