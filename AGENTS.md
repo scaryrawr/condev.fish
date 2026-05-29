@@ -1,20 +1,45 @@
-# Copilot Instructions for condev.fish
+# Repository Instructions for condev.fish
 
 ## Overview
 condev is a Fish shell plugin for discovering and connecting to VS Code devcontainers. It provides a CLI interface to list, select, and exec into devcontainers with intelligent user detection and lifecycle management.
 
+## Build, Test, and Lint Commands
+
+There is no build step or formal automated test suite in this Fish plugin. Use Fish's parser and targeted command checks when changing functions:
+
+```fish
+# Syntax check all plugin files
+fish -n functions/*.fish completions/*.fish
+
+# Syntax check one touched file
+fish -n functions/__condev_connect.fish
+
+# Load the plugin in a fresh Fish process and verify routing/help
+fish -c 'set -p fish_function_path (pwd)/functions; source functions/condev.fish; condev --help >/dev/null'
+```
+
+Manual behavior checks depend on local Docker devcontainers:
+
+```fish
+condev -l      # running devcontainers
+condev -la     # running and stopped devcontainers
+condev NAME    # connection flow, user detection, workspace, lifecycle command, shell selection
+```
+
 ## Architecture
 
-### Function Organization
-- **Main entry**: [functions/condev.fish](../functions/condev.fish) - Argument parsing and command routing
-- **Private helpers**: `__condev_*` functions in [functions/](../functions/) - Follow fish shell convention of double underscore prefix for private functions
-- **Completions**: [completions/condev.fish](../completions/condev.fish) - Tab completion definitions
+### Command Flow
+
+- `functions/condev.fish` is the public entry point. It parses `--help`, `--list`, and `--all`, then routes to help, listing, interactive selection, or connection.
+- Private helpers use the Fish double-underscore convention (`__condev_*`) and are autoloaded from `functions/` by Fisher/Fish.
+- `completions/condev.fish` disables file completions for `condev`, defines flags, and delegates positional container completion to `__condev_complete_containers`.
 
 ### Core Component Responsibilities
 - `__condev_get_containers`: Queries Docker for containers with `devcontainer.config_file` label
 - `__condev_get_info`: Extracts metadata from Docker labels (`vsch.local.repository`, `vsch.local.repository.folder`, `devcontainer.metadata`)
 - `__condev_connect`: Handles user detection, container startup, lifecycle scripts, and shell execution
 - `__condev_select`: Interactive picker using fzf or numbered menu fallback
+- `__condev_list` and `__condev_complete_containers`: Format the same Docker-derived container metadata for list output and tab completions
 
 ## Critical Patterns
 
@@ -26,10 +51,10 @@ docker inspect "$container" --format '{{index .Config.Labels "label.name"}}'
 Key labels: `devcontainer.config_file`, `devcontainer.metadata` (JSON), `vsch.local.repository`, `vsch.local.repository.folder`
 
 ### User Detection Hierarchy
-[functions/__condev_connect.fish](../functions/__condev_connect.fish#L21-L36) implements fallback chain:
+[functions/__condev_connect.fish](functions/__condev_connect.fish#L21-L36) implements this fallback chain:
 1. Parse `remoteUser` from `devcontainer.metadata` JSON label
 2. Fallback to container's `.Config.User`
-3. Search for common users (vscode, node, codespace, devcontainer) via `getent passwd`
+3. Search for common users (`vscode`, `node`, `codespace`, `devcontainer`) via `getent passwd`
 4. Last resort: default to `vscode` (never root)
 
 ### Shell Detection
@@ -39,24 +64,9 @@ docker exec -it "$container" /bin/sh -c 'if command -v fish >/dev/null; then exe
 ```
 
 ### Cross-Platform Compatibility
-- Date parsing differs between macOS and Linux - see [functions/__condev_format_time.fish](../functions/__condev_format_time.fish#L4-L10)
+- Date parsing differs between macOS and Linux; see [functions/__condev_format_time.fish](functions/__condev_format_time.fish)
 - Use `date -j -f` for macOS, `date -d` for Linux with fallback
 - Always check command availability with `command -q` or `command -v`
-
-## Development Workflows
-
-### Testing Changes
-```fish
-# Reload functions after edits
-source functions/condev.fish
-
-# Test with existing containers
-condev -l
-condev -la
-
-# Test connection flow
-condev container-name
-```
 
 ### Debugging Docker Labels
 ```fish
@@ -73,6 +83,7 @@ docker inspect container-name --format '{{index .Config.Labels "devcontainer.met
 - Write errors to `>&2` (stderr)
 - Return non-zero exit codes on failure
 - Provide actionable error messages with context
+- Prefer one Docker inspect call when a command needs multiple fields; avoid repeated inspect calls in hot paths like list/completion/connect
 
 ### Output Formatting
 - Use `set_color` for status indicators (green for running)
